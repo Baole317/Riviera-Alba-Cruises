@@ -8,6 +8,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Upload, X, Plus, Image as ImageIcon, Trash2, Edit3, Download, FileJson } from 'lucide-react';
 import Viewer360 from './components/Viewer360';
 
+interface HotspotLink {
+  targetId: string;
+  phi: number;
+  theta: number;
+}
+
 interface Hotspot {
   id: string;
   name: string;
@@ -15,8 +21,7 @@ interface Hotspot {
   x: number; // Tọa độ % trên map
   y: number; // Tọa độ % trên map
   isPlaced: boolean;
-  phi?: number; // Tọa độ 3D trong 360 view
-  theta?: number; // Tọa độ 3D trong 360 view
+  links?: HotspotLink[];
 }
 
 export default function App() {
@@ -159,7 +164,13 @@ export default function App() {
   };
 
   const deleteHotspot = (id: string) => {
-    setHotspots((prev) => prev.filter((h) => h.id !== id));
+    setHotspots((prev) => prev
+      .filter((h) => h.id !== id)
+      .map((h) => ({
+        ...h,
+        links: h.links ? h.links.filter(l => l.targetId !== id) : undefined
+      }))
+    );
   };
 
   const updateHotspotName = (id: string, name: string) => {
@@ -384,6 +395,28 @@ export default function App() {
             onNavigate={(h) => setSelectedHotspot(h)}
             onUpdateHotspot={(id, data) => {
               setHotspots(prev => prev.map(h => h.id === id ? { ...h, ...data } : h));
+            }}
+            onAddLink={(sourceId, link) => {
+              setHotspots(prev => prev.map(h => {
+                if (h.id === sourceId) {
+                  const links = h.links || [];
+                  // Remove existing link to same target if any
+                  const filteredLinks = links.filter(l => l.targetId !== link.targetId);
+                  return { ...h, links: [...filteredLinks, link] };
+                }
+                return h;
+              }));
+            }}
+            onUpdateLink={(sourceId, targetId, data) => {
+              setHotspots(prev => prev.map(h => {
+                if (h.id === sourceId && h.links) {
+                  return {
+                    ...h,
+                    links: h.links.map(l => l.targetId === targetId ? { ...l, ...data } : l)
+                  };
+                }
+                return h;
+              }));
             }}
             lastDrop={lastDrop}
           />

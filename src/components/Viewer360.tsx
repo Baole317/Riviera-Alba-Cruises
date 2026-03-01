@@ -29,7 +29,7 @@ interface Viewer360Props {
   lastDrop?: { id: string; x: number; y: number } | null;
 }
 
-const Viewer360: React.FC<Viewer360Props> = ({ url, onClose, hotspots, currentId, onNavigate, onUpdateHotspot, onAddLink, onUpdateLink, lastDrop }) => {
+const Viewer360: React.FC<Viewer360Props> = ({ url, onClose, hotspots, currentId, onNavigate, isViewMode, onUpdateHotspot, onAddLink, onUpdateLink, lastDrop }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDraggingHotspot, setIsDraggingHotspot] = useState<string | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -320,14 +320,18 @@ const Viewer360: React.FC<Viewer360Props> = ({ url, onClose, hotspots, currentId
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>Click điểm để di chuyển</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Kéo thả từ danh sách để thêm điểm</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-            <span>Alt + Kéo để chỉnh vị trí</span>
-          </div>
+          {!isViewMode && (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>Kéo thả từ danh sách để thêm điểm</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span>Alt + Kéo để chỉnh vị trí</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

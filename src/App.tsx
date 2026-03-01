@@ -31,8 +31,16 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [editingHotspot, setEditingHotspot] = useState<string | null>(null);
   const [lastDrop, setLastDrop] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const projectInfo = {
+    title: "PROGRESS REPORT",
+    projectName: "RIVIERA ALBA",
+    creator: "Bao Le",
+    date: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  };
 
   // Helper to convert File to Base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -182,7 +190,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F8F9FA] font-sans text-[#1A1A1A]">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-black/5">
             <img 
               src="https://binhanshipping.vn/wp-content/uploads/2024/07/cropped-logo-binh-an.webp" 
@@ -191,41 +199,66 @@ export default function App() {
               referrerPolicy="no-referrer"
             />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">360° Site Mapper</h1>
-            <p className="text-xs text-black/40 font-medium uppercase tracking-wider">Bình An Shipping Tool</p>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-widest text-emerald-600 uppercase">{projectInfo.title}</h1>
+              <span className="w-1 h-1 rounded-full bg-black/20" />
+              <h2 className="text-sm font-black tracking-tight text-black">{projectInfo.projectName}</h2>
+            </div>
+            <div className="flex items-center gap-3 mt-0.5">
+              <p className="text-[10px] text-black/40 font-bold uppercase tracking-wider">Created by: {projectInfo.creator}</p>
+              <span className="text-[10px] text-black/20">•</span>
+              <p className="text-[10px] text-black/40 font-bold uppercase tracking-wider">{projectInfo.date}</p>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 mr-4 pr-4 border-r border-black/10">
-            <button 
-              onClick={exportData}
-              className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold hover:bg-emerald-100 transition-all"
-              title="Xuất dữ liệu JSON"
-            >
-              <Download size={14} />
-              <span>Export</span>
-            </button>
-            <label className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-bold cursor-pointer hover:bg-blue-100 transition-all" title="Nhập dữ liệu JSON">
-              <FileJson size={14} />
-              <span>Import</span>
-              <input type="file" accept=".json" className="hidden" onChange={importData} />
-            </label>
-          </div>
+          {!isViewMode && (
+            <div className="flex items-center gap-2 mr-4 pr-4 border-r border-black/10">
+              <button 
+                onClick={exportData}
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold hover:bg-emerald-100 transition-all"
+                title="Xuất dữ liệu JSON"
+              >
+                <Download size={14} />
+                <span>Export</span>
+              </button>
+              <label className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-bold cursor-pointer hover:bg-blue-100 transition-all" title="Nhập dữ liệu JSON">
+                <FileJson size={14} />
+                <span>Import</span>
+                <input type="file" accept=".json" className="hidden" onChange={importData} />
+              </label>
+            </div>
+          )}
 
-          <label className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-full text-sm font-medium cursor-pointer hover:bg-black/80 transition-all shadow-sm">
-            <Upload size={16} />
-            <span>Nạp Ảnh 360°</span>
-            <input type="file" accept="image/*" multiple className="hidden" onChange={handle360Upload} />
-          </label>
-          
-          {!sitePlan && (
-            <label className="flex items-center gap-2 px-4 py-2 bg-white border border-black/10 rounded-full text-sm font-medium cursor-pointer hover:bg-black/5 transition-all">
-              <ImageIcon size={16} />
-              <span>Tải Mặt Bằng</span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleSitePlanUpload} />
-            </label>
+          <button 
+            onClick={() => setIsViewMode(!isViewMode)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${
+              isViewMode 
+                ? 'bg-emerald-500 text-white hover:bg-emerald-600' 
+                : 'bg-white border border-black/10 text-black hover:bg-black/5'
+            }`}
+          >
+            {isViewMode ? 'Chế độ Chỉnh sửa' : 'Chế độ Xem (Viewer)'}
+          </button>
+
+          {!isViewMode && (
+            <>
+              <label className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-full text-sm font-medium cursor-pointer hover:bg-black/80 transition-all shadow-sm">
+                <Upload size={16} />
+                <span>Nạp Ảnh 360°</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handle360Upload} />
+              </label>
+              
+              {!sitePlan && (
+                <label className="flex items-center gap-2 px-4 py-2 bg-white border border-black/10 rounded-full text-sm font-medium cursor-pointer hover:bg-black/5 transition-all">
+                  <ImageIcon size={16} />
+                  <span>Tải Mặt Bằng</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleSitePlanUpload} />
+                </label>
+              )}
+            </>
           )}
         </div>
       </header>
@@ -233,70 +266,74 @@ export default function App() {
       {/* Main Content */}
       <main className="relative h-screen w-screen overflow-hidden bg-[#F0F2F5]">
         {/* Floating Sidebar - List of points */}
-        <aside className="absolute top-24 left-6 z-[60] w-7 md:w-20 lg:w-36 max-h-[calc(100vh-8rem)] bg-white/90 backdrop-blur-xl rounded-3xl border border-black/5 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 hover:w-72 group/sidebar">
-          <div className="p-4 border-b border-black/5 flex items-center justify-between">
-            <h2 className="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden md:block group-hover/sidebar:block">Điểm 360°</h2>
-            <span className="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto md:mx-0">{hotspots.length}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-            {hotspots.length === 0 ? (
-              <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
-                <Plus size={24} strokeWidth={1} className="mb-2" />
-                <p className="text-[8px] font-medium uppercase tracking-tighter hidden md:block group-hover/sidebar:block">Trống</p>
-              </div>
-            ) : (
-              hotspots.map((h) => (
-                <motion.div
-                  key={h.id}
-                  drag
-                  dragSnapToOrigin
-                  onDragStart={() => setIsDragging(true)}
-                  onDragEnd={(_, info) => handleDragEndFromSidebar(h.id, info)}
-                  whileDrag={{ scale: 1.02, zIndex: 50 }}
-                  className={`group p-2 rounded-xl transition-all cursor-grab active:cursor-grabbing border flex flex-col items-center md:items-start group-hover/sidebar:items-start select-none ${
-                    h.isPlaced 
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' 
-                      : 'bg-white border-black/5 hover:border-black/20 shadow-sm'
-                  }`}
-                  onClick={() => h.isPlaced && setSelectedHotspot(h)}
-                >
-                  <div className="flex items-center gap-3 w-full">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative pointer-events-none">
-                      <img 
-                        src={h.url} 
-                        className="w-full h-full object-cover" 
-                        alt="" 
-                        draggable="false"
-                        referrerPolicy="no-referrer" 
-                      />
-                      {h.isPlaced && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0 hidden md:block group-hover/sidebar:block text-left">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-bold truncate">{h.name}</p>
-                        <div className="flex gap-1 transition-opacity">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setEditingHotspot(h.id); }}
-                            className="p-1 hover:bg-black/5 rounded text-black/40 hover:text-black"
-                          >
-                            <Edit3 size={10} />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); deleteHotspot(h.id); }}
-                            className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
+        {!isViewMode && (
+          <aside className="absolute top-24 left-6 z-[60] w-7 md:w-20 lg:w-36 max-h-[calc(100vh-8rem)] bg-white/90 backdrop-blur-xl rounded-3xl border border-black/5 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 hover:w-72 group/sidebar">
+            <div className="p-4 border-b border-black/5 flex items-center justify-between">
+              <h2 className="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden md:block group-hover/sidebar:block">Điểm 360°</h2>
+              <span className="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto md:mx-0">{hotspots.length}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+              {hotspots.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
+                  <Plus size={24} strokeWidth={1} className="mb-2" />
+                  <p className="text-[8px] font-medium uppercase tracking-tighter hidden md:block group-hover/sidebar:block">Trống</p>
+                </div>
+              ) : (
+                hotspots.map((h) => (
+                  <motion.div
+                    key={h.id}
+                    drag
+                    dragSnapToOrigin
+                    onDragStart={() => setIsDragging(true)}
+                    onDragEnd={(_, info) => handleDragEndFromSidebar(h.id, info)}
+                    whileDrag={{ scale: 1.02, zIndex: 50 }}
+                    className={`group p-2 rounded-xl transition-all cursor-grab active:cursor-grabbing border flex flex-col items-center md:items-start group-hover/sidebar:items-start select-none ${
+                      h.isPlaced 
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' 
+                        : 'bg-white border-black/5 hover:border-black/20 shadow-sm'
+                    }`}
+                    onClick={() => h.isPlaced && setSelectedHotspot(h)}
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative pointer-events-none">
+                        <img 
+                          src={h.url} 
+                          className="w-full h-full object-cover" 
+                          alt="" 
+                          draggable="false"
+                          referrerPolicy="no-referrer" 
+                        />
+                        {h.isPlaced && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white" />}
                       </div>
-                      <p className="text-[8px] opacity-40 font-mono">#{h.id.slice(0, 4)}</p>
+                      <div className="flex-1 min-w-0 hidden md:block group-hover/sidebar:block text-left">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold truncate">{h.name}</p>
+                          {!isViewMode && (
+                            <div className="flex gap-1 transition-opacity">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setEditingHotspot(h.id); }}
+                                className="p-1 hover:bg-black/5 rounded text-black/40 hover:text-black"
+                              >
+                                <Edit3 size={10} />
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); deleteHotspot(h.id); }}
+                                className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[8px] opacity-40 font-mono">#{h.id.slice(0, 4)}</p>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-        </aside>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
 
         {/* Full Screen Site Plan Area */}
         <section className="h-full w-full relative flex items-center justify-center overflow-hidden">
@@ -334,11 +371,11 @@ export default function App() {
                   {hotspots.filter(h => h.isPlaced).map((h) => (
                     <motion.div
                       key={h.id}
-                      drag
+                      drag={!isViewMode}
                       dragMomentum={false}
                       onDragStart={() => setIsDragging(true)}
                       onDragEnd={(_, info) => handleDragEndOnMap(h.id, info)}
-                      className="absolute z-10 cursor-grab active:cursor-grabbing"
+                      className={`absolute z-10 ${isViewMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
                       style={{ 
                         left: `${h.x}%`, 
                         top: `${h.y}%`,
@@ -370,15 +407,17 @@ export default function App() {
               </div>
               
               {/* Floating Controls */}
-              <div className="absolute bottom-8 right-8 flex gap-3">
-                <button 
-                  onClick={() => setSitePlan(null)}
-                  className="p-4 bg-white/80 backdrop-blur-md border border-black/5 rounded-2xl shadow-2xl hover:bg-red-50 text-red-500 transition-all hover:scale-110 active:scale-95"
-                  title="Xóa mặt bằng"
-                >
-                  <Trash2 size={24} />
-                </button>
-              </div>
+              {!isViewMode && (
+                <div className="absolute bottom-8 right-8 flex gap-3">
+                  <button 
+                    onClick={() => setSitePlan(null)}
+                    className="p-4 bg-white/80 backdrop-blur-md border border-black/5 rounded-2xl shadow-2xl hover:bg-red-50 text-red-500 transition-all hover:scale-110 active:scale-95"
+                    title="Xóa mặt bằng"
+                  >
+                    <Trash2 size={24} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -393,10 +432,13 @@ export default function App() {
             hotspots={hotspots}
             currentId={selectedHotspot.id}
             onNavigate={(h) => setSelectedHotspot(h)}
+            isViewMode={isViewMode}
             onUpdateHotspot={(id, data) => {
+              if (isViewMode) return;
               setHotspots(prev => prev.map(h => h.id === id ? { ...h, ...data } : h));
             }}
             onAddLink={(sourceId, link) => {
+              if (isViewMode) return;
               setHotspots(prev => prev.map(h => {
                 if (h.id === sourceId) {
                   const links = h.links || [];
@@ -408,6 +450,7 @@ export default function App() {
               }));
             }}
             onUpdateLink={(sourceId, targetId, data) => {
+              if (isViewMode) return;
               setHotspots(prev => prev.map(h => {
                 if (h.id === sourceId && h.links) {
                   return {

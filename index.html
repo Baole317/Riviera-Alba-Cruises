@@ -3,312 +3,777 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360° Site Mapper - Portable Edition</title>
+    <title>360° Site Mapper - Single File</title>
     
-    <!-- Libraries -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js" crossorigin></script>
+    <script src="https://unpkg.com/lucide@latest" crossorigin></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js" crossorigin></script>
+
     <style>
-        body { font-family: 'Inter', sans-serif; overflow: hidden; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
-        a-scene { height: 100% !important; width: 100% !important; }
-        .a-canvas { position: absolute !important; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+        
+        .viewer-360-container canvas {
+            display: block;
+        }
     </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-[#F8F9FA]">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useRef, useEffect, useCallback, useMemo } = React;
+        const { motion, AnimatePresence } = window.Motion || window.FramerMotion || { motion: (props) => <div {...props} />, AnimatePresence: ({children}) => children };
 
-        // --- Components ---
-        
-        const Icon = ({ name, size = 16, className = "" }) => {
+        // --- Icons Helper ---
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
             useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
+                try {
+                    if (window.lucide) {
+                        window.lucide.createIcons();
+                    }
+                } catch (err) {
+                    console.warn('Lucide icon creation failed:', err);
+                }
             }, [name]);
-            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+            
+            // Map PascalCase to kebab-case for Lucide vanilla
+            const kebabName = name
+                .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+                .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+                .toLowerCase();
+
+            return <i data-lucide={kebabName} className={className} style={{ width: size, height: size, display: 'inline-block' }}></i>;
         };
 
-        const AFrameViewer = ({ url, hotspots, currentId, onClose, onNavigate, isViewerMode }) => {
-            const sceneRef = useRef(null);
+        // --- Viewer360 Component ---
+        const Viewer360 = ({ url, onClose, hotspots, currentId, onNavigate, onUpdateHotspot, lastDrop, isSetupMode }) => {
+            const containerRef = useRef(null);
+            const [isDraggingHotspot, setIsDraggingHotspot] = useState(null);
+            const cameraRef = useRef(null);
 
             useEffect(() => {
-                // Đảm bảo A-Frame resize đúng khi mount
-                const timer = setTimeout(() => {
-                    if (sceneRef.current) sceneRef.current.resize();
-                }, 100);
-                return () => clearTimeout(timer);
-            }, []);
+                if (lastDrop && cameraRef.current && containerRef.current) {
+                    const rect = containerRef.current.getBoundingClientRect();
+                    const mouse = new THREE.Vector2();
+                    mouse.x = ((lastDrop.x - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((lastDrop.y - rect.top) / rect.height) * 2 + 1;
+
+                    const raycaster = new THREE.Raycaster();
+                    raycaster.setFromCamera(mouse, cameraRef.current);
+                    
+                    const dir = raycaster.ray.direction.clone().normalize();
+                    const pos = dir.multiplyScalar(400);
+                    
+                    const r = pos.length();
+                    const newLat = 90 - THREE.MathUtils.radToDeg(Math.acos(pos.y / r));
+                    const newLon = THREE.MathUtils.radToDeg(Math.atan2(pos.z, pos.x));
+                    
+                    onUpdateHotspot(lastDrop.id, { 
+                        phi: newLat, 
+                        theta: newLon, 
+                        isPlaced: true 
+                    });
+                }
+            }, [lastDrop]);
+
+            useEffect(() => {
+                if (!containerRef.current) return;
+
+                const width = containerRef.current.clientWidth;
+                const height = containerRef.current.clientHeight;
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+                cameraRef.current = camera;
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(width, height);
+                containerRef.current.appendChild(renderer.domElement);
+
+                const geometry = new THREE.SphereGeometry(500, 60, 40);
+                geometry.scale(-1, 1, 1);
+
+                const textureLoader = new THREE.TextureLoader();
+                const texture = textureLoader.load(url);
+                const material = new THREE.MeshBasicMaterial({ map: texture });
+                const mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+
+                camera.position.set(0, 0, 0.1);
+
+                const hotspotsGroup = new THREE.Group();
+                scene.add(hotspotsGroup);
+
+                const createHotspotMesh = (h) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256;
+                    canvas.height = 256;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.clearRect(0, 0, 256, 256);
+                        const text = h.name.slice(0, 20);
+                        ctx.font = 'bold 28px Inter';
+                        const textWidth = ctx.measureText(text).width;
+                        const padding = 30;
+                        
+                        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                        ctx.beginPath();
+                        if (ctx.roundRect) {
+                            ctx.roundRect(128 - (textWidth + padding) / 2, 10, textWidth + padding, 50, 25);
+                        } else {
+                            ctx.rect(128 - (textWidth + padding) / 2, 10, textWidth + padding, 50);
+                        }
+                        ctx.fill();
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(text, 128, 45);
+
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                        ctx.shadowBlur = 20;
+                        ctx.shadowOffsetY = 10;
+
+                        ctx.globalAlpha = 0.7;
+                        ctx.fillStyle = '#f97316';
+                        ctx.beginPath();
+                        ctx.arc(128, 138, 70, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        ctx.shadowColor = 'transparent';
+                        ctx.shadowBlur = 0;
+                        ctx.shadowOffsetY = 0;
+
+                        ctx.globalAlpha = 1.0;
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 8;
+                        ctx.stroke();
+
+                        ctx.fillStyle = 'white';
+                        ctx.beginPath();
+                        ctx.arc(128, 138, 20, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    const hotspotTexture = new THREE.CanvasTexture(canvas);
+                    const hotspotMaterial = new THREE.SpriteMaterial({ 
+                        map: hotspotTexture,
+                        transparent: true,
+                        depthTest: false
+                    });
+                    const sprite = new THREE.Sprite(hotspotMaterial);
+                    sprite.scale.set(75, 75, 1);
+                    sprite.userData = { id: h.id, hotspot: h };
+
+                    const phi = THREE.MathUtils.degToRad(90 - (h.phi || 0));
+                    const theta = THREE.MathUtils.degToRad(h.theta || 0);
+                    sprite.position.set(
+                        400 * Math.sin(phi) * Math.cos(theta),
+                        400 * Math.cos(phi),
+                        400 * Math.sin(phi) * Math.sin(theta)
+                    );
+
+                    return sprite;
+                };
+
+                hotspots.filter(h => h.id !== currentId && h.isPlaced).forEach(h => {
+                    hotspotsGroup.add(createHotspotMesh(h));
+                });
+
+                let isUserInteracting = false;
+                let onPointerDownPointerX = 0;
+                let onPointerDownPointerY = 0;
+                let onPointerDownLon = 0;
+                let onPointerDownLat = 0;
+                let lon = 0;
+                let lat = 0;
+                let phi = 0;
+                let theta = 0;
+
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2();
+
+                const onPointerDown = (event) => {
+                    const rect = containerRef.current.getBoundingClientRect();
+                    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+
+                    const intersects = raycaster.intersectObjects(hotspotsGroup.children);
+                    if (intersects.length > 0) {
+                        const clickedSprite = intersects[0].object;
+                        if (event.altKey && isSetupMode) {
+                            setIsDraggingHotspot(clickedSprite.userData.id);
+                        } else {
+                            onNavigate(clickedSprite.userData.hotspot);
+                        }
+                        return;
+                    }
+
+                    isUserInteracting = true;
+                    onPointerDownPointerX = event.clientX;
+                    onPointerDownPointerY = event.clientY;
+                    onPointerDownLon = lon;
+                    onPointerDownLat = lat;
+                };
+
+                const onPointerMove = (event) => {
+                    if (isDraggingHotspot && isSetupMode) {
+                        const rect = containerRef.current.getBoundingClientRect();
+                        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                        raycaster.setFromCamera(mouse, camera);
+                        
+                        const dir = raycaster.ray.direction.clone().normalize();
+                        const pos = dir.multiplyScalar(400);
+                        
+                        const sprite = hotspotsGroup.children.find(c => c.userData.id === isDraggingHotspot);
+                        if (sprite) {
+                            sprite.position.copy(pos);
+                            const r = pos.length();
+                            const newLat = 90 - THREE.MathUtils.radToDeg(Math.acos(pos.y / r));
+                            const newLon = THREE.MathUtils.radToDeg(Math.atan2(pos.z, pos.x));
+                            onUpdateHotspot(isDraggingHotspot, { phi: newLat, theta: newLon });
+                        }
+                        return;
+                    }
+
+                    if (isUserInteracting) {
+                        lon = (onPointerDownPointerX - event.clientX) * 0.1 + onPointerDownLon;
+                        lat = (event.clientY - onPointerDownPointerY) * 0.1 + onPointerDownLat;
+                    }
+                };
+
+                const onPointerUp = () => {
+                    isUserInteracting = false;
+                    setIsDraggingHotspot(null);
+                };
+
+                const onWheel = (event) => {
+                    const fov = camera.fov + event.deltaY * 0.05;
+                    camera.fov = THREE.MathUtils.clamp(fov, 10, 75);
+                    camera.updateProjectionMatrix();
+                };
+
+                const container = containerRef.current;
+                container.addEventListener('pointerdown', onPointerDown);
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+                container.addEventListener('wheel', onWheel);
+
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    lat = Math.max(-85, Math.min(85, lat));
+                    phi = THREE.MathUtils.degToRad(90 - lat);
+                    theta = THREE.MathUtils.degToRad(lon);
+                    const x = 500 * Math.sin(phi) * Math.cos(theta);
+                    const y = 500 * Math.cos(phi);
+                    const z = 500 * Math.sin(phi) * Math.sin(theta);
+                    camera.lookAt(x, y, z);
+                    renderer.render(scene, camera);
+                };
+
+                animate();
+
+                const handleResize = () => {
+                    if (!containerRef.current) return;
+                    const w = containerRef.current.clientWidth;
+                    const h = containerRef.current.clientHeight;
+                    camera.aspect = w / h;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(w, h);
+                };
+
+                window.addEventListener('resize', handleResize);
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    if (container) {
+                        container.removeEventListener('pointerdown', onPointerDown);
+                        container.removeEventListener('wheel', onWheel);
+                    }
+                    renderer.dispose();
+                    geometry.dispose();
+                    material.dispose();
+                    if (container && renderer.domElement && renderer.domElement.parentNode === container) {
+                        container.removeChild(renderer.domElement);
+                    }
+                };
+            }, [url, hotspots, currentId, isSetupMode]); // Removed isDraggingHotspot to prevent constant scene rebuilds
 
             return (
-                <div className="fixed inset-0 z-[100] bg-black">
-                    <a-scene ref={sceneRef} embedded vr-mode-ui="enabled: false" cursor="rayOrigin: mouse">
-                        <a-assets>
-                            <img id="skyTexture" src={url} crossOrigin="anonymous" />
-                        </a-assets>
-
-                        <a-sky src="#skyTexture" rotation="0 -90 0"></a-sky>
-                        
-                        <a-entity camera look-controls="reverseMouseDrag: false"></a-entity>
-
-                        {/* Hotspots */}
-                        {hotspots.map(h => {
-                            if (h.id === currentId || !h.phi || !h.theta) return null;
-                            
-                            // Chuyển đổi tọa độ cầu sang tọa độ Descartes cho A-Frame
-                            const radius = 5;
-                            const phi = h.phi;
-                            const theta = h.theta;
-                            
-                            const x = radius * Math.sin(phi) * Math.cos(theta);
-                            const y = radius * Math.cos(phi);
-                            const z = radius * Math.sin(phi) * Math.sin(theta);
-
-                            return (
-                                <a-entity 
-                                    key={h.id}
-                                    position={`${x} ${y} ${z}`}
-                                    look-at="[camera]"
-                                    onClick={() => onNavigate(h)}
-                                >
-                                    <a-circle radius="0.2" color="#EF4444" opacity="0.6"></a-circle>
-                                    <a-text 
-                                        value={h.name} 
-                                        align="center" 
-                                        position="0 0.4 0" 
-                                        scale="0.5 0.5 0.5"
-                                        color="white"
-                                    ></a-text>
-                                </a-entity>
-                            );
-                        })}
-                    </a-scene>
-
-                    {/* UI Overlay */}
-                    <div className="absolute top-6 left-6 z-[110] flex items-center gap-4">
-                        <button 
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm viewer-360-container">
+                    <div className="relative w-[95vw] h-[90vh] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+                        <div ref={containerRef} className="w-full h-full cursor-move" />
+                        <button
                             onClick={onClose}
-                            className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-2xl text-white transition-all hover:scale-110 active:scale-95"
                         >
-                            <Icon name="x" size={24} />
+                            <Icon name="X" size={24} />
                         </button>
-                        <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl text-white">
-                            <p className="text-xs font-bold uppercase tracking-widest opacity-60">Đang xem</p>
-                            <p className="font-semibold">Ảnh 360°</p>
+                        
+                        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-black/50 backdrop-blur-xl rounded-2xl text-white text-[10px] font-bold uppercase tracking-wider flex gap-6 pointer-events-none border border-white/10">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-white/40" />
+                                <span>Kéo để xoay</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                <span>Click điểm để di chuyển</span>
+                            </div>
+                            {isSetupMode && (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                        <span>Kéo thả từ sidebar để thêm điểm</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                        <span>Alt + Kéo để chỉnh vị trí</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
             );
         };
 
-        const App = () => {
-            const [mode, setMode] = useState(() => {
-                const params = new URLSearchParams(window.location.search);
-                return params.get('mode') === 'viewer' ? 'viewer' : 'setup';
-            });
+        // --- Main App Component ---
+        function App() {
             const [hotspots, setHotspots] = useState([]);
             const [sitePlan, setSitePlan] = useState(null);
             const [selectedHotspot, setSelectedHotspot] = useState(null);
             const [isDragging, setIsDragging] = useState(false);
+            const [editingHotspot, setEditingHotspot] = useState(null);
+            const [lastDrop, setLastDrop] = useState(null);
             
             const containerRef = useRef(null);
-            const isPublic = new URLSearchParams(window.location.search).get('public') === 'true';
 
-            // --- Auto Load Logic ---
+            const isSetupMode = useMemo(() => new URLSearchParams(window.location.search).get('mode') === 'setup', []);
+
+            // Auto-load config.json
             useEffect(() => {
-                const autoLoad = async () => {
-                    const hostname = window.location.hostname;
-                    const pathname = window.location.pathname;
-                    
-                    if (hostname.endsWith('.github.io')) {
-                        const owner = hostname.split('.')[0];
-                        const repo = pathname.split('/').filter(Boolean)[0];
-                        if (owner && repo) {
-                            try {
-                                const apiResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/`);
-                                if (apiResp.ok) {
-                                    const files = await apiResp.json();
-                                    const configFiles = files
-                                        .filter(f => f.name.endsWith('.json') && f.name.startsWith('360-project-config-'))
-                                        .sort((a, b) => b.name.localeCompare(a.name));
-                                    
-                                    if (configFiles.length > 0) {
-                                        const latest = configFiles[0];
-                                        const resp = await fetch(latest.download_url);
-                                        if (resp.ok) {
-                                            const config = await resp.json();
-                                            if (config.sitePlan) setSitePlan(config.sitePlan);
-                                            if (config.hotspots) setHotspots(config.hotspots);
-                                            return;
-                                        }
-                                    }
-                                }
-                            } catch (e) { console.error(e); }
+                fetch('./config.json')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data) {
+                            setSitePlan(data.sitePlan || null);
+                            setHotspots(data.hotspots || []);
                         }
-                    }
-                    
-                    // Fallback
-                    try {
-                        const resp = await fetch('./config.json');
-                        if (resp.ok) {
-                            const config = await resp.json();
-                            setSitePlan(config.sitePlan);
-                            setHotspots(config.hotspots);
-                        }
-                    } catch (e) {}
-                };
-                autoLoad();
+                    })
+                    .catch(err => console.log('No config.json found or error loading:', err));
             }, []);
 
-            const handleSitePlanUpload = (e) => {
-                const file = e.target.files?.[0];
-                if (file) setSitePlan(URL.createObjectURL(file));
-            };
-
-            const handle360Upload = (e) => {
-                const files = e.target.files;
-                if (files) {
-                    Array.from(files).forEach(file => {
-                        const url = URL.createObjectURL(file);
-                        setHotspots(prev => [...prev, {
-                            id: Math.random().toString(36).substr(2, 9),
-                            name: file.name.split('.')[0],
-                            url: url,
-                            x: 50, y: 50,
-                            isPlaced: false
-                        }]);
-                    });
-                }
-            };
-
+            // Export JSON
             const exportConfig = () => {
-                const config = { sitePlan, hotspots };
+                const config = {
+                    sitePlan: './siteplan.jpg',
+                    hotspots: hotspots.map((h, index) => ({
+                        ...h,
+                        url: `./room${index + 1}.jpg`
+                    }))
+                };
                 const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `360-project-config-${Date.now()}.json`;
+                a.download = 'config.json';
                 a.click();
             };
 
+            // Import JSON
+            const handleImportConfig = (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            setSitePlan(data.sitePlan || null);
+                            setHotspots(data.hotspots || []);
+                        } catch (err) {
+                            alert('Lỗi định dạng file JSON');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            const handleSitePlanUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    const url = URL.createObjectURL(file);
+                    setSitePlan(url);
+                }
+            };
+
+            const handle360Upload = (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    Array.from(files).forEach((file) => {
+                        const url = URL.createObjectURL(file);
+                        const newHotspot = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            name: file.name.split('.')[0] || 'Điểm mới',
+                            url: url,
+                            x: 50,
+                            y: 50,
+                            isPlaced: false,
+                        };
+                        setHotspots((prev) => [...prev, newHotspot]);
+                    });
+                }
+            };
+
+            const handleDragEndFromSidebar = (id, info) => {
+                if (containerRef.current && !selectedHotspot) {
+                    const rect = containerRef.current.getBoundingClientRect();
+                    const x = ((info.point.x - rect.left) / rect.width) * 100;
+                    const y = ((info.point.y - rect.top) / rect.height) * 100;
+
+                    if (x >= 0 && x <= 100 && y >= 0 && y <= 100) {
+                        setHotspots((prev) =>
+                            prev.map((h) => (h.id === id ? { ...h, x, y, isPlaced: true } : h))
+                        );
+                    }
+                }
+                
+                const viewerElement = document.querySelector('.viewer-360-container');
+                if (viewerElement && selectedHotspot) {
+                    const rect = viewerElement.getBoundingClientRect();
+                    if (info.point.x >= rect.left && info.point.x <= rect.right && 
+                        info.point.y >= rect.top && info.point.y <= rect.bottom) {
+                        setLastDrop({ id, x: info.point.x, y: info.point.y });
+                        setTimeout(() => setLastDrop(null), 100);
+                    }
+                }
+                setIsDragging(false);
+            };
+
+            const handleDragEndOnMap = (id, info) => {
+                if (!containerRef.current) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                const x = ((info.point.x - rect.left) / rect.width) * 100;
+                const y = ((info.point.y - rect.top) / rect.height) * 100;
+                setHotspots((prev) =>
+                    prev.map((h) => (h.id === id ? { ...h, x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) } : h))
+                );
+                setIsDragging(false);
+            };
+
+            const deleteHotspot = (id) => {
+                setHotspots((prev) => prev.filter((h) => h.id !== id));
+            };
+
+            const updateHotspotName = (id, name) => {
+                setHotspots((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
+                setEditingHotspot(null);
+            };
+
             return (
-                <div className="h-screen flex flex-col">
+                <div className="min-h-screen bg-[#F8F9FA] font-sans text-[#1A1A1A]">
                     {/* Header */}
-                    <header className="h-16 bg-white border-b border-black/5 px-6 flex items-center justify-between z-50">
+                    <header className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white">
-                                <Icon name="map-pin" size={18} />
+                            <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white">
+                                <Icon name="MapPin" size={24} />
                             </div>
-                            <h1 className="font-bold tracking-tight">360° Mapper</h1>
+                            <div>
+                                <h1 className="text-lg font-semibold tracking-tight">360° Site Mapper</h1>
+                                <p className="text-xs text-black/40 font-medium uppercase tracking-wider">Professional Tool</p>
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            {mode === 'setup' && (
+                        <div className="flex items-center gap-3">
+                            {isSetupMode && (
                                 <>
-                                    <label className="px-4 py-2 bg-black text-white rounded-full text-xs font-bold cursor-pointer">
-                                        + Ảnh 360
-                                        <input type="file" multiple className="hidden" onChange={handle360Upload} />
-                                    </label>
-                                    <button onClick={exportConfig} className="px-4 py-2 bg-emerald-600 text-white rounded-full text-xs font-bold">
-                                        Export
+                                    <button 
+                                        onClick={exportConfig}
+                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-full text-sm font-medium hover:bg-emerald-700 transition-all shadow-sm"
+                                    >
+                                        <span>Export JSON</span>
                                     </button>
+                                    
+                                    <label className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-full text-sm font-medium cursor-pointer hover:bg-amber-700 transition-all shadow-sm">
+                                        <span>Import JSON</span>
+                                        <input type="file" accept=".json" className="hidden" onChange={handleImportConfig} />
+                                    </label>
+
+                                    <label className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-full text-sm font-medium cursor-pointer hover:bg-black/80 transition-all shadow-sm">
+                                        <Icon name="Upload" size={16} />
+                                        <span>Nạp Ảnh 360°</span>
+                                        <input type="file" accept="image/*" multiple className="hidden" onChange={handle360Upload} />
+                                    </label>
+                                    
+                                    {!sitePlan && (
+                                        <label className="flex items-center gap-2 px-4 py-2 bg-white border border-black/10 rounded-full text-sm font-medium cursor-pointer hover:bg-black/5 transition-all">
+                                            <Icon name="Image" size={16} />
+                                            <span>Tải Mặt Bằng</span>
+                                            <input type="file" accept="image/*" className="hidden" onChange={handleSitePlanUpload} />
+                                        </label>
+                                    )}
                                 </>
-                            )}
-                            {!isPublic && (
-                                <button 
-                                    onClick={() => setMode(mode === 'setup' ? 'viewer' : 'setup')}
-                                    className="px-4 py-2 bg-amber-100 text-amber-700 rounded-full text-xs font-bold"
-                                >
-                                    {mode === 'setup' ? 'Xem' : 'Sửa'}
-                                </button>
                             )}
                         </div>
                     </header>
 
-                    {/* Main */}
-                    <main className="flex-1 relative bg-[#F0F2F5] overflow-hidden">
-                        {!sitePlan ? (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <label className="p-12 bg-white rounded-3xl shadow-xl border border-black/5 text-center cursor-pointer hover:scale-105 transition-all">
-                                    <Icon name="image" size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p className="font-bold">Tải mặt bằng lên</p>
-                                    <input type="file" className="hidden" onChange={handleSitePlanUpload} />
-                                </label>
-                            </div>
-                        ) : (
-                            <div className="h-full w-full flex items-center justify-center p-8">
-                                <div className="relative inline-block shadow-2xl rounded-xl overflow-hidden">
-                                    <img src={sitePlan} className="max-h-[80vh] object-contain" />
-                                    <div className="absolute inset-0">
-                                        {hotspots.filter(h => h.isPlaced || mode === 'setup').map(h => (
-                                            <div 
-                                                key={h.id}
-                                                className="absolute w-6 h-6 -ml-3 -mt-3 bg-red-500 border-2 border-white rounded-full cursor-pointer shadow-lg flex items-center justify-center text-[8px] text-white font-bold"
-                                                style={{ left: `${h.x}%`, top: `${h.y}%` }}
-                                                onClick={() => setSelectedHotspot(h)}
-                                                onMouseDown={(e) => {
-                                                    if (mode !== 'setup') return;
-                                                    const startX = e.clientX;
-                                                    const startY = e.clientY;
-                                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                                                    
-                                                    const move = (moveEvent) => {
-                                                        const newX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-                                                        const newY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
-                                                        setHotspots(prev => prev.map(ph => ph.id === h.id ? { ...ph, x: newX, y: newY, isPlaced: true } : ph));
-                                                    };
-                                                    const up = () => {
-                                                        window.removeEventListener('mousemove', move);
-                                                        window.removeEventListener('mouseup', up);
-                                                    };
-                                                    window.addEventListener('mousemove', move);
-                                                    window.addEventListener('mouseup', up);
-                                                }}
-                                            >
-                                                {h.name[0]}
-                                            </div>
-                                        ))}
-                                    </div>
+                    {/* Main Content */}
+                    <main className="relative h-screen w-screen overflow-hidden bg-[#F0F2F5]">
+                        {/* Floating Sidebar */}
+                        {isSetupMode && (
+                            <aside className="absolute top-24 left-6 z-[60] w-7 md:w-20 lg:w-36 max-h-[calc(100vh-8rem)] bg-white/90 backdrop-blur-xl rounded-3xl border border-black/5 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 hover:w-72 group/sidebar">
+                                <div className="p-4 border-b border-black/5 flex items-center justify-between">
+                                    <h2 className="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden md:block group-hover/sidebar:block">Điểm 360°</h2>
+                                    <span className="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto md:mx-0">{hotspots.length}</span>
                                 </div>
-                            </div>
+                                <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                                    {hotspots.length === 0 ? (
+                                        <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
+                                            <Icon name="Plus" size={24} className="mb-2" />
+                                            <p className="text-[8px] font-medium uppercase tracking-tighter hidden md:block group-hover/sidebar:block">Trống</p>
+                                        </div>
+                                    ) : (
+                                        hotspots.map((h) => (
+                                            <motion.div
+                                                key={h.id}
+                                                drag
+                                                dragSnapToOrigin
+                                                onDragStart={() => setIsDragging(true)}
+                                                onDragEnd={(_, info) => handleDragEndFromSidebar(h.id, info)}
+                                                whileDrag={{ scale: 1.02, zIndex: 50 }}
+                                                className={`group p-2 rounded-xl transition-all cursor-grab active:cursor-grabbing border flex flex-col items-center md:items-start group-hover/sidebar:items-start select-none ${
+                                                    h.isPlaced 
+                                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' 
+                                                        : 'bg-white border-black/5 hover:border-black/20 shadow-sm'
+                                                }`}
+                                                onClick={() => h.isPlaced && setSelectedHotspot(h)}
+                                            >
+                                                <div className="flex items-center gap-3 w-full">
+                                                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative pointer-events-none">
+                                                        <img 
+                                                            src={h.url} 
+                                                            className="w-full h-full object-cover" 
+                                                            alt="" 
+                                                            draggable="false"
+                                                        />
+                                                        {h.isPlaced && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white" />}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0 hidden md:block group-hover/sidebar:block text-left">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-[10px] font-bold truncate">{h.name}</p>
+                                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); setEditingHotspot(h.id); }}
+                                                                    className="p-1 hover:bg-black/5 rounded text-black/40 hover:text-black"
+                                                                >
+                                                                    <Icon name="Edit3" size={10} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); deleteHotspot(h.id); }}
+                                                                    className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded"
+                                                                >
+                                                                    <Icon name="Trash2" size={10} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-[8px] opacity-40 font-mono">#{h.id.slice(0, 4)}</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        ))
+                                    )}
+                                </div>
+                            </aside>
                         )}
 
-                        {/* Sidebar Setup */}
-                        {mode === 'setup' && (
-                            <div className="absolute top-6 left-6 w-48 bg-white/90 backdrop-blur shadow-xl rounded-2xl p-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-                                <p className="text-[10px] font-bold uppercase opacity-40 mb-4">Danh sách điểm</p>
-                                {hotspots.map(h => (
-                                    <div key={h.id} className="mb-2 p-2 bg-black/5 rounded-lg text-[10px] font-bold truncate">
-                                        {h.name}
+                        {/* Site Plan Area */}
+                        <section className="h-full w-full relative flex items-center justify-center overflow-hidden">
+                            {!sitePlan ? (
+                                <div className="text-center p-12 bg-white rounded-[40px] shadow-2xl border border-black/5 max-w-sm mx-auto">
+                                    <div className="w-24 h-24 bg-black/5 rounded-full flex items-center justify-center mx-auto mb-8">
+                                        <Icon name="Image" size={40} className="text-black/20" />
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                    <h3 className="text-2xl font-bold mb-3 tracking-tight">Bắt đầu dự án</h3>
+                                    <p className="text-black/40 mb-8 text-sm leading-relaxed">Tải lên hình ảnh mặt bằng để bắt đầu định vị các điểm 360°.</p>
+                                    <label className="inline-flex items-center gap-3 px-8 py-4 bg-black text-white rounded-2xl font-bold cursor-pointer hover:scale-105 transition-all shadow-xl shadow-black/20 active:scale-95">
+                                        <Icon name="Upload" size={20} />
+                                        <span>Chọn file mặt bằng</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleSitePlanUpload} />
+                                    </label>
+                                </div>
+                            ) : (
+                                <div 
+                                    ref={containerRef}
+                                    className="relative w-full h-full flex items-center justify-center overflow-hidden"
+                                >
+                                    <div className="relative inline-block max-w-[95%] max-h-[95%]">
+                                        <motion.img 
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            src={sitePlan} 
+                                            alt="Site Plan" 
+                                            draggable="false"
+                                            className="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)]"
+                                        />
+                                        
+                                        <div className="absolute inset-0">
+                                            {hotspots.filter(h => h.isPlaced).map((h) => (
+                                                <motion.div
+                                                    key={h.id}
+                                                    drag={isSetupMode}
+                                                    dragMomentum={false}
+                                                    onDragStart={() => setIsDragging(true)}
+                                                    onDragEnd={(_, info) => handleDragEndOnMap(h.id, info)}
+                                                    className={`absolute z-10 ${isSetupMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+                                                    style={{ 
+                                                        left: `${h.x}%`, 
+                                                        top: `${h.y}%`,
+                                                        x: '-50%',
+                                                        y: '-50%'
+                                                    }}
+                                                >
+                                                    <div className="relative group/pin flex flex-col items-center">
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-black/60 backdrop-blur-sm text-white text-[8px] font-bold uppercase tracking-wider rounded-md whitespace-nowrap shadow-sm border border-white/10 pointer-events-none">
+                                                            {h.name}
+                                                        </div>
+                                                        
+                                                        <div 
+                                                            onClick={() => !isDragging && setSelectedHotspot(h)}
+                                                            className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                                                                selectedHotspot?.id === h.id 
+                                                                    ? 'bg-red-600/60 scale-110 shadow-[0_0_10px_rgba(220,38,38,0.6)]' 
+                                                                    : 'bg-red-600/30 hover:bg-red-600/50 hover:scale-110 shadow-lg'
+                                                            } border-2 border-white`}
+                                                        >
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    
+                                    {isSetupMode && (
+                                        <div className="absolute bottom-8 right-8 flex gap-3">
+                                            <button 
+                                                onClick={() => setSitePlan(null)}
+                                                className="p-4 bg-white/80 backdrop-blur-md border border-black/5 rounded-2xl shadow-2xl hover:bg-red-50 text-red-500 transition-all hover:scale-110 active:scale-95"
+                                                title="Xóa mặt bằng"
+                                            >
+                                                <Icon name="Trash2" size={24} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
                     </main>
 
-                    {/* 360 Viewer Modal */}
-                    {selectedHotspot && (
-                        <AFrameViewer 
-                            url={selectedHotspot.url}
-                            hotspots={hotspots}
-                            currentId={selectedHotspot.id}
-                            onClose={() => setSelectedHotspot(null)}
-                            onNavigate={(h) => setSelectedHotspot(h)}
-                            isViewerMode={mode === 'viewer'}
-                        />
+                    {/* Modals */}
+                    <AnimatePresence>
+                        {selectedHotspot && (
+                            <Viewer360 
+                                url={selectedHotspot.url} 
+                                onClose={() => setSelectedHotspot(null)} 
+                                hotspots={hotspots}
+                                currentId={selectedHotspot.id}
+                                onNavigate={(h) => setSelectedHotspot(h)}
+                                onUpdateHotspot={(id, data) => {
+                                    setHotspots(prev => prev.map(h => h.id === id ? { ...h, ...data } : h));
+                                }}
+                                lastDrop={lastDrop}
+                                isSetupMode={isSetupMode}
+                            />
+                        )}
+
+                        {editingHotspot && (
+                            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
+                                >
+                                    <h3 className="text-xl font-semibold mb-6">Đổi tên điểm</h3>
+                                    <input 
+                                        autoFocus
+                                        type="text"
+                                        defaultValue={hotspots.find(h => h.id === editingHotspot)?.name}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') updateHotspotName(editingHotspot, e.currentTarget.value);
+                                            if (e.key === 'Escape') setEditingHotspot(null);
+                                        }}
+                                        className="w-full px-4 py-3 bg-black/5 rounded-xl border-none focus:ring-2 focus:ring-black mb-6"
+                                    />
+                                    <div className="flex gap-3">
+                                        <button 
+                                            onClick={() => setEditingHotspot(null)}
+                                            className="flex-1 py-3 font-medium text-black/40 hover:text-black transition-colors"
+                                        >
+                                            Hủy
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const input = document.querySelector('input');
+                                                updateHotspotName(editingHotspot, input.value);
+                                            }}
+                                            className="flex-1 py-3 bg-black text-white rounded-xl font-medium hover:bg-black/80 transition-all"
+                                        >
+                                            Lưu thay đổi
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    {!sitePlan && hotspots.length > 0 && isSetupMode && (
+                        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-30">
+                            <div className="bg-black text-white px-6 py-3 rounded-full text-sm font-medium shadow-2xl animate-bounce">
+                                Tải mặt bằng lên để bắt đầu kéo thả các điểm!
+                            </div>
+                        </div>
                     )}
                 </div>
             );
-        };
+        }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);

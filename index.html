@@ -1,13 +1,317 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° Site Mapper - Portable Edition</title>
+    
+    <!-- Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
+        a-scene { height: 100% !important; width: 100% !important; }
+        .a-canvas { position: absolute !important; }
+    </style>
+</head>
+<body class="bg-[#F8F9FA]">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
 
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- Components ---
+        
+        const Icon = ({ name, size = 16, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        const AFrameViewer = ({ url, hotspots, currentId, onClose, onNavigate, isViewerMode }) => {
+            const sceneRef = useRef(null);
+
+            useEffect(() => {
+                // Đảm bảo A-Frame resize đúng khi mount
+                const timer = setTimeout(() => {
+                    if (sceneRef.current) sceneRef.current.resize();
+                }, 100);
+                return () => clearTimeout(timer);
+            }, []);
+
+            return (
+                <div className="fixed inset-0 z-[100] bg-black">
+                    <a-scene ref={sceneRef} embedded vr-mode-ui="enabled: false" cursor="rayOrigin: mouse">
+                        <a-assets>
+                            <img id="skyTexture" src={url} crossOrigin="anonymous" />
+                        </a-assets>
+
+                        <a-sky src="#skyTexture" rotation="0 -90 0"></a-sky>
+                        
+                        <a-entity camera look-controls="reverseMouseDrag: false"></a-entity>
+
+                        {/* Hotspots */}
+                        {hotspots.map(h => {
+                            if (h.id === currentId || !h.phi || !h.theta) return null;
+                            
+                            // Chuyển đổi tọa độ cầu sang tọa độ Descartes cho A-Frame
+                            const radius = 5;
+                            const phi = h.phi;
+                            const theta = h.theta;
+                            
+                            const x = radius * Math.sin(phi) * Math.cos(theta);
+                            const y = radius * Math.cos(phi);
+                            const z = radius * Math.sin(phi) * Math.sin(theta);
+
+                            return (
+                                <a-entity 
+                                    key={h.id}
+                                    position={`${x} ${y} ${z}`}
+                                    look-at="[camera]"
+                                    onClick={() => onNavigate(h)}
+                                >
+                                    <a-circle radius="0.2" color="#EF4444" opacity="0.6"></a-circle>
+                                    <a-text 
+                                        value={h.name} 
+                                        align="center" 
+                                        position="0 0.4 0" 
+                                        scale="0.5 0.5 0.5"
+                                        color="white"
+                                    ></a-text>
+                                </a-entity>
+                            );
+                        })}
+                    </a-scene>
+
+                    {/* UI Overlay */}
+                    <div className="absolute top-6 left-6 z-[110] flex items-center gap-4">
+                        <button 
+                            onClick={onClose}
+                            className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                        >
+                            <Icon name="x" size={24} />
+                        </button>
+                        <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl text-white">
+                            <p className="text-xs font-bold uppercase tracking-widest opacity-60">Đang xem</p>
+                            <p className="font-semibold">Ảnh 360°</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [mode, setMode] = useState(() => {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('mode') === 'viewer' ? 'viewer' : 'setup';
+            });
+            const [hotspots, setHotspots] = useState([]);
+            const [sitePlan, setSitePlan] = useState(null);
+            const [selectedHotspot, setSelectedHotspot] = useState(null);
+            const [isDragging, setIsDragging] = useState(false);
+            
+            const containerRef = useRef(null);
+            const isPublic = new URLSearchParams(window.location.search).get('public') === 'true';
+
+            // --- Auto Load Logic ---
+            useEffect(() => {
+                const autoLoad = async () => {
+                    const hostname = window.location.hostname;
+                    const pathname = window.location.pathname;
+                    
+                    if (hostname.endsWith('.github.io')) {
+                        const owner = hostname.split('.')[0];
+                        const repo = pathname.split('/').filter(Boolean)[0];
+                        if (owner && repo) {
+                            try {
+                                const apiResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/`);
+                                if (apiResp.ok) {
+                                    const files = await apiResp.json();
+                                    const configFiles = files
+                                        .filter(f => f.name.endsWith('.json') && f.name.startsWith('360-project-config-'))
+                                        .sort((a, b) => b.name.localeCompare(a.name));
+                                    
+                                    if (configFiles.length > 0) {
+                                        const latest = configFiles[0];
+                                        const resp = await fetch(latest.download_url);
+                                        if (resp.ok) {
+                                            const config = await resp.json();
+                                            if (config.sitePlan) setSitePlan(config.sitePlan);
+                                            if (config.hotspots) setHotspots(config.hotspots);
+                                            return;
+                                        }
+                                    }
+                                }
+                            } catch (e) { console.error(e); }
+                        }
+                    }
+                    
+                    // Fallback
+                    try {
+                        const resp = await fetch('./config.json');
+                        if (resp.ok) {
+                            const config = await resp.json();
+                            setSitePlan(config.sitePlan);
+                            setHotspots(config.hotspots);
+                        }
+                    } catch (e) {}
+                };
+                autoLoad();
+            }, []);
+
+            const handleSitePlanUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (file) setSitePlan(URL.createObjectURL(file));
+            };
+
+            const handle360Upload = (e) => {
+                const files = e.target.files;
+                if (files) {
+                    Array.from(files).forEach(file => {
+                        const url = URL.createObjectURL(file);
+                        setHotspots(prev => [...prev, {
+                            id: Math.random().toString(36).substr(2, 9),
+                            name: file.name.split('.')[0],
+                            url: url,
+                            x: 50, y: 50,
+                            isPlaced: false
+                        }]);
+                    });
+                }
+            };
+
+            const exportConfig = () => {
+                const config = { sitePlan, hotspots };
+                const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `360-project-config-${Date.now()}.json`;
+                a.click();
+            };
+
+            return (
+                <div className="h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="h-16 bg-white border-b border-black/5 px-6 flex items-center justify-between z-50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white">
+                                <Icon name="map-pin" size={18} />
+                            </div>
+                            <h1 className="font-bold tracking-tight">360° Mapper</h1>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {mode === 'setup' && (
+                                <>
+                                    <label className="px-4 py-2 bg-black text-white rounded-full text-xs font-bold cursor-pointer">
+                                        + Ảnh 360
+                                        <input type="file" multiple className="hidden" onChange={handle360Upload} />
+                                    </label>
+                                    <button onClick={exportConfig} className="px-4 py-2 bg-emerald-600 text-white rounded-full text-xs font-bold">
+                                        Export
+                                    </button>
+                                </>
+                            )}
+                            {!isPublic && (
+                                <button 
+                                    onClick={() => setMode(mode === 'setup' ? 'viewer' : 'setup')}
+                                    className="px-4 py-2 bg-amber-100 text-amber-700 rounded-full text-xs font-bold"
+                                >
+                                    {mode === 'setup' ? 'Xem' : 'Sửa'}
+                                </button>
+                            )}
+                        </div>
+                    </header>
+
+                    {/* Main */}
+                    <main className="flex-1 relative bg-[#F0F2F5] overflow-hidden">
+                        {!sitePlan ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <label className="p-12 bg-white rounded-3xl shadow-xl border border-black/5 text-center cursor-pointer hover:scale-105 transition-all">
+                                    <Icon name="image" size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p className="font-bold">Tải mặt bằng lên</p>
+                                    <input type="file" className="hidden" onChange={handleSitePlanUpload} />
+                                </label>
+                            </div>
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center p-8">
+                                <div className="relative inline-block shadow-2xl rounded-xl overflow-hidden">
+                                    <img src={sitePlan} className="max-h-[80vh] object-contain" />
+                                    <div className="absolute inset-0">
+                                        {hotspots.filter(h => h.isPlaced || mode === 'setup').map(h => (
+                                            <div 
+                                                key={h.id}
+                                                className="absolute w-6 h-6 -ml-3 -mt-3 bg-red-500 border-2 border-white rounded-full cursor-pointer shadow-lg flex items-center justify-center text-[8px] text-white font-bold"
+                                                style={{ left: `${h.x}%`, top: `${h.y}%` }}
+                                                onClick={() => setSelectedHotspot(h)}
+                                                onMouseDown={(e) => {
+                                                    if (mode !== 'setup') return;
+                                                    const startX = e.clientX;
+                                                    const startY = e.clientY;
+                                                    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+                                                    
+                                                    const move = (moveEvent) => {
+                                                        const newX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+                                                        const newY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+                                                        setHotspots(prev => prev.map(ph => ph.id === h.id ? { ...ph, x: newX, y: newY, isPlaced: true } : ph));
+                                                    };
+                                                    const up = () => {
+                                                        window.removeEventListener('mousemove', move);
+                                                        window.removeEventListener('mouseup', up);
+                                                    };
+                                                    window.addEventListener('mousemove', move);
+                                                    window.addEventListener('mouseup', up);
+                                                }}
+                                            >
+                                                {h.name[0]}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Sidebar Setup */}
+                        {mode === 'setup' && (
+                            <div className="absolute top-6 left-6 w-48 bg-white/90 backdrop-blur shadow-xl rounded-2xl p-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+                                <p className="text-[10px] font-bold uppercase opacity-40 mb-4">Danh sách điểm</p>
+                                {hotspots.map(h => (
+                                    <div key={h.id} className="mb-2 p-2 bg-black/5 rounded-lg text-[10px] font-bold truncate">
+                                        {h.name}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </main>
+
+                    {/* 360 Viewer Modal */}
+                    {selectedHotspot && (
+                        <AFrameViewer 
+                            url={selectedHotspot.url}
+                            hotspots={hotspots}
+                            currentId={selectedHotspot.id}
+                            onClose={() => setSelectedHotspot(null)}
+                            onNavigate={(h) => setSelectedHotspot(h)}
+                            isViewerMode={mode === 'viewer'}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

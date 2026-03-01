@@ -38,20 +38,61 @@ export default function App() {
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Tự động nạp dữ liệu từ file config mặc định nếu có
+  // Tự động nạp dữ liệu từ file config mới nhất nếu có
   useEffect(() => {
     const autoLoadConfig = async () => {
-      const defaultConfigName = '360-project-config-1772328555311.json';
-      try {
-        const response = await fetch(`./${defaultConfigName}`);
-        if (response.ok) {
-          const config = await response.json() as ProjectConfig;
-          if (config.sitePlan) setSitePlan(config.sitePlan);
-          if (config.hotspots) setHotspots(config.hotspots);
-          console.log(`Đã tự động nạp cấu hình từ ${defaultConfigName}`);
+      const hostname = window.location.hostname;
+      const pathname = window.location.pathname;
+      
+      // 1. Thử tìm qua GitHub API nếu đang chạy trên github.io
+      if (hostname.endsWith('.github.io')) {
+        const owner = hostname.split('.')[0];
+        // Lấy repo name từ pathname (thường là /repo-name/)
+        const repo = pathname.split('/').filter(Boolean)[0];
+        
+        if (owner && repo) {
+          try {
+            const apiResp = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/`);
+            if (apiResp.ok) {
+              const files = await apiResp.json();
+              // Lọc các file .json có định dạng config và sắp xếp giảm dần theo tên (chứa timestamp)
+              const configFiles = files
+                .filter((f: any) => f.name.endsWith('.json') && f.name.startsWith('360-project-config-'))
+                .sort((a: any, b: any) => b.name.localeCompare(a.name));
+              
+              if (configFiles.length > 0) {
+                const latestFile = configFiles[0];
+                const response = await fetch(latestFile.download_url);
+                if (response.ok) {
+                  const config = await response.json() as ProjectConfig;
+                  if (config.sitePlan) setSitePlan(config.sitePlan);
+                  if (config.hotspots) setHotspots(config.hotspots);
+                  console.log(`Đã tự động nạp cấu hình mới nhất từ GitHub: ${latestFile.name}`);
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Lỗi khi truy vấn GitHub API:", e);
+          }
         }
-      } catch (err) {
-        console.log('Không tìm thấy file cấu hình mặc định hoặc có lỗi khi nạp.');
+      }
+
+      // 2. Fallback: Thử nạp file cố định hoặc config.json nếu không phải GitHub hoặc API lỗi
+      const fallbacks = ['config.json', '360-project-config-1772328555311.json'];
+      for (const fileName of fallbacks) {
+        try {
+          const response = await fetch(`./${fileName}`);
+          if (response.ok) {
+            const config = await response.json() as ProjectConfig;
+            if (config.sitePlan) setSitePlan(config.sitePlan);
+            if (config.hotspots) setHotspots(config.hotspots);
+            console.log(`Đã nạp cấu hình từ file fallback: ${fileName}`);
+            break;
+          }
+        } catch (err) {
+          // Tiếp tục thử file tiếp theo
+        }
       }
     };
 

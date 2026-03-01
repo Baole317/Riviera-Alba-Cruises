@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Upload, X, Plus, Image as ImageIcon, Trash2, Edit3 } from 'lucide-react';
 import Viewer360 from './components/Viewer360';
@@ -37,6 +37,26 @@ export default function App() {
   const [lastDrop, setLastDrop] = useState<{ id: string; x: number; y: number } | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Tự động nạp dữ liệu từ file config mặc định nếu có
+  useEffect(() => {
+    const autoLoadConfig = async () => {
+      const defaultConfigName = '360-project-config-1772328555311.json';
+      try {
+        const response = await fetch(`./${defaultConfigName}`);
+        if (response.ok) {
+          const config = await response.json() as ProjectConfig;
+          if (config.sitePlan) setSitePlan(config.sitePlan);
+          if (config.hotspots) setHotspots(config.hotspots);
+          console.log(`Đã tự động nạp cấu hình từ ${defaultConfigName}`);
+        }
+      } catch (err) {
+        console.log('Không tìm thấy file cấu hình mặc định hoặc có lỗi khi nạp.');
+      }
+    };
+
+    autoLoadConfig();
+  }, []);
 
   // Xử lý upload mặt bằng
   const handleSitePlanUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

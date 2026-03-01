@@ -189,9 +189,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8F9FA] font-sans text-[#1A1A1A]">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
+      <header className={`fixed top-0 left-0 right-0 z-40 px-6 transition-all duration-500 flex items-center justify-between h-16 bg-white/90 backdrop-blur-xl border-b border-black/5 shadow-sm`}>
         <div className="flex items-center gap-4">
-          <div className="w-24 h-24 flex items-center justify-center overflow-hidden">
+          <div className="w-12 h-12 flex items-center justify-center overflow-hidden transition-all duration-500">
             <img 
               src="https://binhanshipping.vn/wp-content/uploads/2024/07/cropped-logo-binh-an.webp" 
               alt="Binh An Shipping Logo" 
@@ -201,7 +201,7 @@ export default function App() {
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-widest text-emerald-600 uppercase">{projectInfo.title}</h1>
+              <h1 className={`text-xs font-bold tracking-widest uppercase transition-colors ${isViewMode ? 'text-black' : 'text-emerald-600'}`}>{projectInfo.title}</h1>
               <span className="w-1 h-1 rounded-full bg-black/20" />
               <h2 className="text-sm font-black tracking-tight text-black">{projectInfo.projectName}</h2>
             </div>
@@ -266,77 +266,79 @@ export default function App() {
       {/* Main Content */}
       <main className="relative h-screen w-screen overflow-hidden bg-[#F0F2F5]">
         {/* Floating Sidebar - List of points */}
-        {!isViewMode && (
-          <aside className="absolute top-24 left-6 z-[60] w-7 md:w-20 lg:w-36 max-h-[calc(100vh-8rem)] bg-white/90 backdrop-blur-xl rounded-3xl border border-black/5 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 hover:w-72 group/sidebar">
-            <div className="p-4 border-b border-black/5 flex items-center justify-between">
-              <h2 className="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden md:block group-hover/sidebar:block">Điểm 360°</h2>
-              <span className="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto md:mx-0">{hotspots.length}</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-              {hotspots.length === 0 ? (
-                <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
-                  <Plus size={24} strokeWidth={1} className="mb-2" />
-                  <p className="text-[8px] font-medium uppercase tracking-tighter hidden md:block group-hover/sidebar:block">Trống</p>
-                </div>
-              ) : (
-                hotspots.map((h) => (
-                  <motion.div
-                    key={h.id}
-                    drag
-                    dragSnapToOrigin
-                    onDragStart={() => setIsDragging(true)}
-                    onDragEnd={(_, info) => handleDragEndFromSidebar(h.id, info)}
-                    whileDrag={{ scale: 1.02, zIndex: 50 }}
-                    className={`group p-2 rounded-xl transition-all cursor-grab active:cursor-grabbing border flex flex-col items-center md:items-start group-hover/sidebar:items-start select-none ${
-                      h.isPlaced 
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' 
-                        : 'bg-white border-black/5 hover:border-black/20 shadow-sm'
-                    }`}
-                    onClick={() => h.isPlaced && setSelectedHotspot(h)}
-                  >
-                    <div className="flex items-center gap-3 w-full">
-                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative pointer-events-none">
-                        <img 
-                          src={h.url} 
-                          className="w-full h-full object-cover" 
-                          alt="" 
-                          draggable="false"
-                          referrerPolicy="no-referrer" 
-                        />
-                        {h.isPlaced && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0 hidden md:block group-hover/sidebar:block text-left">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-bold truncate">{h.name}</p>
-                          {!isViewMode && (
-                            <div className="flex gap-1 transition-opacity">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setEditingHotspot(h.id); }}
-                                className="p-1 hover:bg-black/5 rounded text-black/40 hover:text-black"
-                              >
-                                <Edit3 size={10} />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); deleteHotspot(h.id); }}
-                                className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded"
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-[8px] opacity-40 font-mono">#{h.id.slice(0, 4)}</p>
-                      </div>
+        <aside className={`absolute left-6 z-[60] transition-all duration-500 group/sidebar flex flex-col overflow-hidden ${
+          isViewMode 
+            ? 'top-20 bottom-8 w-24 hover:w-[480px] bg-white/60 backdrop-blur-md rounded-2xl border border-white/20 shadow-lg' 
+            : 'top-20 w-7 md:w-20 lg:w-36 max-h-[calc(100vh-8rem)] bg-white/90 backdrop-blur-xl rounded-3xl border border-black/5 shadow-2xl hover:w-72'
+        }`}>
+          <div className={`p-4 border-b border-black/5 flex items-center justify-between ${isViewMode ? 'bg-white/20' : ''}`}>
+            <h2 className="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden md:block group-hover/sidebar:block">Điểm 360°</h2>
+            <span className="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto md:mx-0">{hotspots.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+            {hotspots.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
+                <Plus size={24} strokeWidth={1} className="mb-2" />
+                <p className="text-[8px] font-medium uppercase tracking-tighter hidden md:block group-hover/sidebar:block">Trống</p>
+              </div>
+            ) : (
+              hotspots.map((h) => (
+                <motion.div
+                  key={h.id}
+                  drag={!isViewMode}
+                  dragSnapToOrigin
+                  onDragStart={() => setIsDragging(true)}
+                  onDragEnd={(_, info) => handleDragEndFromSidebar(h.id, info)}
+                  whileDrag={{ scale: 1.02, zIndex: 50 }}
+                  className={`group p-2 rounded-xl transition-all cursor-grab active:cursor-grabbing border flex flex-col items-center md:items-start group-hover/sidebar:items-start select-none ${
+                    h.isPlaced 
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' 
+                      : 'bg-white border-black/5 hover:border-black/20 shadow-sm'
+                  }`}
+                  onClick={() => h.isPlaced && setSelectedHotspot(h)}
+                >
+                  <div className="flex items-center gap-3 w-full">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative pointer-events-none">
+                      <img 
+                        src={h.url} 
+                        className="w-full h-full object-cover" 
+                        alt="" 
+                        draggable="false"
+                        referrerPolicy="no-referrer" 
+                      />
+                      {h.isPlaced && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white" />}
                     </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          </aside>
-        )}
+                    <div className="flex-1 min-w-0 hidden md:block group-hover/sidebar:block text-left">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold truncate">{h.name}</p>
+                        {!isViewMode && (
+                          <div className="flex gap-1 transition-opacity">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingHotspot(h.id); }}
+                              className="p-1 hover:bg-black/5 rounded text-black/40 hover:text-black"
+                            >
+                              <Edit3 size={10} />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); deleteHotspot(h.id); }}
+                              className="p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[8px] opacity-40 font-mono">#{h.id.slice(0, 4)}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </aside>
 
         {/* Full Screen Site Plan Area */}
-        <section className="h-full w-full relative flex items-center justify-center overflow-hidden">
+        <section className="h-full w-full relative flex overflow-hidden transition-all duration-500 items-start pt-20 pb-8 pl-[144px] pr-6 justify-end">
           {!sitePlan ? (
             <div className="text-center p-12 bg-white rounded-[40px] shadow-2xl border border-black/5 max-w-sm mx-auto">
               <div className="w-24 h-24 bg-black/5 rounded-full flex items-center justify-center mx-auto mb-8">
@@ -355,14 +357,14 @@ export default function App() {
               ref={containerRef}
               className="relative w-full h-full flex items-center justify-center overflow-hidden"
             >
-              <div className="relative inline-block max-w-[95%] max-h-[95%]">
+              <div className="relative inline-block max-w-[98%] h-full">
                 <motion.img 
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   src={sitePlan} 
                   alt="Site Plan" 
                   draggable="false"
-                  className="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)]"
+                  className="max-w-full max-h-full object-contain select-none pointer-events-none rounded-xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)]"
                   referrerPolicy="no-referrer"
                 />
                 

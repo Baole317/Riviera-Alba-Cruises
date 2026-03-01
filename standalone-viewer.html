@@ -29,14 +29,14 @@
     </div>
 
     <!-- Header -->
-    <header class="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
+    <header class="fixed top-0 left-0 right-0 z-40 h-16 px-6 bg-white/90 backdrop-blur-xl border-b border-black/5 shadow-sm flex items-center justify-between">
         <div class="flex items-center gap-4">
-            <div class="w-24 h-24 flex items-center justify-center overflow-hidden">
+            <div class="w-12 h-12 flex items-center justify-center overflow-hidden">
                 <img src="https://binhanshipping.vn/wp-content/uploads/2024/07/cropped-logo-binh-an.webp" alt="Logo" class="w-full h-full object-contain">
             </div>
             <div class="flex flex-col">
                 <div class="flex items-center gap-2">
-                    <h1 class="text-sm font-bold tracking-widest text-emerald-600 uppercase">PROGRESS REPORT</h1>
+                    <h1 class="text-xs font-bold tracking-widest text-black uppercase">PROGRESS REPORT</h1>
                     <span class="w-1 h-1 rounded-full bg-black/20"></span>
                     <h2 class="text-sm font-black tracking-tight text-black">RIVIERA ALBA</h2>
                 </div>
@@ -50,13 +50,41 @@
         <div class="text-[10px] font-bold text-black/20 uppercase tracking-widest">Viewer Mode</div>
     </header>
 
+    <!-- Sidebar -->
+    <aside class="fixed left-6 top-20 bottom-8 z-[60] w-24 hover:w-[480px] bg-white/40 backdrop-blur-md rounded-2xl border border-white/20 shadow-lg flex flex-col overflow-hidden transition-all duration-500 group">
+        <div class="p-4 border-b border-black/5 flex items-center justify-between bg-white/20">
+            <h2 class="text-[10px] font-bold text-black/60 uppercase tracking-widest hidden group-hover:block">Điểm 360°</h2>
+            <span class="px-2 py-0.5 bg-black/5 rounded-full text-[10px] font-bold mx-auto group-hover:mx-0" x-text="hotspots.length"></span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+            <template x-for="h in hotspots" :key="h.id">
+                <div class="p-2 rounded-xl transition-all cursor-pointer border flex flex-col items-center group-hover:items-start select-none"
+                     :class="h.isPlaced ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-900' : 'bg-white border-black/5 shadow-sm'"
+                     @click="h.isPlaced && open360(h)">
+                    <div class="flex items-center gap-3 w-full">
+                        <div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-black/10 border border-black/5 relative">
+                            <img :src="h.url" class="w-full h-full object-cover">
+                            <template x-if="h.isPlaced">
+                                <div class="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-white"></div>
+                            </template>
+                        </div>
+                        <div class="flex-1 min-w-0 hidden group-hover:block text-left">
+                            <p class="text-[10px] font-bold truncate" x-text="h.name"></p>
+                            <p class="text-[8px] opacity-40 font-mono" x-text="'#' + h.id.slice(0, 4)"></p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </aside>
+
     <!-- Main Content -->
     <main class="relative h-screen w-screen overflow-hidden">
         <!-- Site Plan Area -->
-        <section class="h-full w-full relative flex items-center justify-center">
+        <section class="h-full w-full relative flex overflow-hidden items-start pt-20 pb-8 pl-[144px] pr-6 justify-end">
             <template x-if="sitePlan">
-                <div class="relative inline-block max-w-[95%] max-h-[95%]">
-                    <img :src="sitePlan" class="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-xl shadow-2xl">
+                <div class="relative inline-block max-w-[95%] h-full">
+                    <img :src="sitePlan" class="max-w-full h-full object-contain select-none pointer-events-none rounded-xl shadow-2xl">
                     
                     <!-- Hotspots Layer -->
                     <div class="absolute inset-0">

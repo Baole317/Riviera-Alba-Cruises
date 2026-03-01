@@ -191,7 +191,7 @@ export default function App() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-black/5">
+          <div className="w-24 h-24 flex items-center justify-center overflow-hidden">
             <img 
               src="https://binhanshipping.vn/wp-content/uploads/2024/07/cropped-logo-binh-an.webp" 
               alt="Binh An Shipping Logo" 

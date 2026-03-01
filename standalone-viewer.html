@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROGRESS REPORT - RIVIERA ALBA</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-[#F0F2F5] overflow-hidden" x-data="viewerApp()">
+
+    <!-- Loading Screen -->
+    <div x-show="loading" class="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center">
+        <div class="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-sm font-bold text-black/40 uppercase tracking-widest">Đang tải dữ liệu...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-black/5 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="w-24 h-24 flex items-center justify-center overflow-hidden">
+                <img src="https://binhanshipping.vn/wp-content/uploads/2024/07/cropped-logo-binh-an.webp" alt="Logo" class="w-full h-full object-contain">
+            </div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm font-bold tracking-widest text-emerald-600 uppercase">PROGRESS REPORT</h1>
+                    <span class="w-1 h-1 rounded-full bg-black/20"></span>
+                    <h2 class="text-sm font-black tracking-tight text-black">RIVIERA ALBA</h2>
+                </div>
+                <div class="flex items-center gap-3 mt-0.5">
+                    <p class="text-[10px] text-black/40 font-bold uppercase tracking-wider">Created by: Bao Le</p>
+                    <span class="text-[10px] text-black/20">•</span>
+                    <p class="text-[10px] text-black/40 font-bold uppercase tracking-wider" x-text="currentDate"></p>
+                </div>
+            </div>
+        </div>
+        <div class="text-[10px] font-bold text-black/20 uppercase tracking-widest">Viewer Mode</div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative h-screen w-screen overflow-hidden">
+        <!-- Site Plan Area -->
+        <section class="h-full w-full relative flex items-center justify-center">
+            <template x-if="sitePlan">
+                <div class="relative inline-block max-w-[95%] max-h-[95%]">
+                    <img :src="sitePlan" class="max-w-full max-h-[90vh] object-contain select-none pointer-events-none rounded-xl shadow-2xl">
+                    
+                    <!-- Hotspots Layer -->
+                    <div class="absolute inset-0">
+                        <template x-for="h in hotspots.filter(h => h.isPlaced)" :key="h.id">
+                            <div class="absolute z-10 cursor-pointer" 
+                                 :style="`left: ${h.x}%; top: ${h.y}%; transform: translate(-50%, -50%)`"
+                                 @click="open360(h)">
+                                <div class="relative group flex flex-col items-center">
+                                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-black/60 backdrop-blur-sm text-white text-[8px] font-bold uppercase tracking-wider rounded-md whitespace-nowrap shadow-sm border border-white/10 pointer-events-none" x-text="h.name"></div>
+                                    <div class="w-5 h-5 rounded-full flex items-center justify-center transition-all bg-red-600/30 hover:bg-red-600/60 hover:scale-110 border-2 border-white shadow-lg">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-white"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+            <template x-if="!sitePlan">
+                <div class="text-black/20 font-bold uppercase tracking-widest">Không có dữ liệu mặt bằng</div>
+            </template>
+        </section>
+    </main>
+
+    <!-- 360 Viewer Modal -->
+    <div x-show="selectedHotspot" 
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        
+        <div class="relative w-[95vw] h-[90vh] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+            <div id="threejs-container" class="w-full h-full cursor-move"></div>
+            
+            <button @click="close360()" class="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-2xl text-white transition-all hover:scale-110">
+                <i data-lucide="x"></i>
+            </button>
+
+            <div class="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-black/50 backdrop-blur-xl rounded-2xl text-white text-[10px] font-bold uppercase tracking-wider flex gap-6 pointer-events-none border border-white/10">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-white/40"></div>
+                    <span>Kéo để xoay</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span>Click điểm để di chuyển</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function viewerApp() {
+            return {
+                loading: true,
+                hotspots: [],
+                sitePlan: null,
+                selectedHotspot: null,
+                currentDate: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                
+                // Three.js variables
+                scene: null,
+                camera: null,
+                renderer: null,
+                mesh: null,
+                hotspotsGroup: null,
+                lon: 0, lat: 0,
+                phi: 0, theta: 0,
+                isUserInteracting: false,
+                onPointerDownPointerX: 0, onPointerDownPointerY: 0,
+                onPointerDownLon: 0, onPointerDownLat: 0,
+
+                async init() {
+                    try {
+                        const response = await fetch('data.json');
+                        if (!response.ok) throw new Error('Không tìm thấy data.json');
+                        const data = await response.json();
+                        this.hotspots = data.hotspots || [];
+                        this.sitePlan = data.sitePlan || null;
+                    } catch (err) {
+                        console.error('Lỗi nạp dữ liệu:', err);
+                        alert('Vui lòng đảm bảo có file data.json nằm cùng thư mục với file này.');
+                    } finally {
+                        this.loading = false;
+                        lucide.createIcons();
+                    }
+                },
+
+                open360(h) {
+                    this.selectedHotspot = h;
+                    this.$nextTick(() => {
+                        this.initThreeJS(h);
+                    });
+                },
+
+                close360() {
+                    this.selectedHotspot = null;
+                    if (this.renderer) {
+                        this.renderer.dispose();
+                        const container = document.getElementById('threejs-container');
+                        if (container) container.innerHTML = '';
+                    }
+                },
+
+                initThreeJS(h) {
+                    const container = document.getElementById('threejs-container');
+                    const width = container.clientWidth;
+                    const height = container.clientHeight;
+
+                    this.scene = new THREE.Scene();
+                    this.camera = new THREE.PerspectiveCamera(75, width / height, 1, 1100);
+                    this.camera.target = new THREE.Vector3(0, 0, 0);
+
+                    const geometry = new THREE.SphereGeometry(500, 60, 40);
+                    geometry.scale(-1, 1, 1);
+
+                    const texture = new THREE.TextureLoader().load(h.url);
+                    const material = new THREE.MeshBasicMaterial({ map: texture });
+                    this.mesh = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.mesh);
+
+                    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    this.renderer.setSize(width, height);
+                    container.appendChild(this.renderer.domElement);
+
+                    this.hotspotsGroup = new THREE.Group();
+                    this.scene.add(this.hotspotsGroup);
+
+                    this.renderHotspots(h);
+
+                    // Events
+                    container.addEventListener('pointerdown', this.onPointerDown.bind(this));
+                    window.addEventListener('pointermove', this.onPointerMove.bind(this));
+                    window.addEventListener('pointerup', this.onPointerUp.bind(this));
+                    container.addEventListener('wheel', this.onWheel.bind(this));
+                    window.addEventListener('resize', this.onResize.bind(this));
+
+                    this.animate();
+                },
+
+                renderHotspots(currentH) {
+                    this.hotspotsGroup.clear();
+                    if (!currentH.links) return;
+
+                    currentH.links.forEach(link => {
+                        const target = this.hotspots.find(item => item.id === link.targetId);
+                        if (target) {
+                            const sprite = this.createHotspotSprite(target, link.phi, link.theta);
+                            this.hotspotsGroup.add(sprite);
+                        }
+                    });
+                },
+
+                createHotspotSprite(h, phi_deg, theta_deg) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256; canvas.height = 256;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw Pin
+                    ctx.clearRect(0, 0, 256, 256);
+                    
+                    // Label
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.font = 'bold 24px Inter';
+                    const textWidth = ctx.measureText(h.name).width;
+                    ctx.beginPath();
+                    ctx.roundRect(128 - (textWidth + 30) / 2, 10, textWidth + 30, 40, 20);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(h.name, 128, 38);
+
+                    // Circle
+                    ctx.globalAlpha = 0.7;
+                    ctx.fillStyle = '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(128, 128, 60, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 6;
+                    ctx.stroke();
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(128, 128, 15, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    const texture = new THREE.CanvasTexture(canvas);
+                    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+                    const sprite = new THREE.Sprite(material);
+                    sprite.scale.set(60, 60, 1);
+                    
+                    const phi = THREE.MathUtils.degToRad(90 - phi_deg);
+                    const theta = THREE.MathUtils.degToRad(theta_deg);
+                    sprite.position.set(
+                        400 * Math.sin(phi) * Math.cos(theta),
+                        400 * Math.cos(phi),
+                        400 * Math.sin(phi) * Math.sin(theta)
+                    );
+                    sprite.userData = { hotspot: h };
+                    return sprite;
+                },
+
+                onPointerDown(event) {
+                    const container = document.getElementById('threejs-container');
+                    const rect = container.getBoundingClientRect();
+                    const mouse = new THREE.Vector2();
+                    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                    const raycaster = new THREE.Raycaster();
+                    raycaster.setFromCamera(mouse, this.camera);
+                    const intersects = raycaster.intersectObjects(this.hotspotsGroup.children);
+
+                    if (intersects.length > 0) {
+                        const h = intersects[0].object.userData.hotspot;
+                        this.close360();
+                        this.open360(h);
+                        return;
+                    }
+
+                    this.isUserInteracting = true;
+                    this.onPointerDownPointerX = event.clientX;
+                    this.onPointerDownPointerY = event.clientY;
+                    this.onPointerDownLon = this.lon;
+                    this.onPointerDownLat = this.lat;
+                },
+
+                onPointerMove(event) {
+                    if (this.isUserInteracting) {
+                        this.lon = (this.onPointerDownPointerX - event.clientX) * 0.1 + this.onPointerDownLon;
+                        this.lat = (event.clientY - this.onPointerDownPointerY) * 0.1 + this.onPointerDownLat;
+                    }
+                },
+
+                onPointerUp() { this.isUserInteracting = false; },
+
+                onWheel(event) {
+                    const fov = this.camera.fov + event.deltaY * 0.05;
+                    this.camera.fov = THREE.MathUtils.clamp(fov, 10, 75);
+                    this.camera.updateProjectionMatrix();
+                },
+
+                onResize() {
+                    const container = document.getElementById('threejs-container');
+                    if (!container || !this.camera) return;
+                    this.camera.aspect = container.clientWidth / container.clientHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(container.clientWidth, container.clientHeight);
+                },
+
+                animate() {
+                    if (!this.selectedHotspot) return;
+                    requestAnimationFrame(this.animate.bind(this));
+                    this.lat = Math.max(-85, Math.min(85, this.lat));
+                    this.phi = THREE.MathUtils.degToRad(90 - this.lat);
+                    this.theta = THREE.MathUtils.degToRad(this.lon);
+                    this.camera.target.x = 500 * Math.sin(this.phi) * Math.cos(this.theta);
+                    this.camera.target.y = 500 * Math.cos(this.phi);
+                    this.camera.target.z = 500 * Math.sin(this.phi) * Math.sin(this.theta);
+                    this.camera.lookAt(this.camera.target);
+                    this.renderer.render(this.scene, this.camera);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

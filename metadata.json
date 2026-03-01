@@ -1,0 +1,5 @@
+{
+  "name": "360° Site Plan Mapper",
+  "description": "Ứng dụng quản lý mặt bằng dự án với tích hợp hình ảnh 360° kéo thả.",
+  "requestFramePermissions": []
+}
